@@ -1,4 +1,4 @@
-from bm.signedauth.authentication import UserAuthentication, IPUserAuthentication
+from signedauth.authentication import UserAuthentication, IPUserAuthentication
 from django.conf.urls.defaults import patterns, handler500, handler404, url
 from django.contrib import admin
 from handlers import EchoHandler

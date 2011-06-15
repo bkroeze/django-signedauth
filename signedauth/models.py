@@ -40,6 +40,9 @@ class UserKey(models.Model):
     user = models.ForeignKey(User, null=True)
 
     def __unicode__(self):
+        if not self.user:
+            return 'Unsaved userkey'
+
         return "Userkey for %s=%s" % (self.user.username, self.key)
 
     def _add_query_param(self, query, param, val):
@@ -147,7 +150,7 @@ class UserKey(models.Model):
 
         sig = self.sign(url, seed)
         query = self._add_query_param(query, 'seed', seed)
-        query = self._add_query_param(query, 'sid', sig)
+        query = self._add_query_param(query, 'sig', sig)
 
         url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
         log.debug('Signed %s = %s', origurl, url)

@@ -1,4 +1,4 @@
-from bm.signedauth.models import UserKey
+from signedauth.models import UserKey
 from django import forms
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render_to_response

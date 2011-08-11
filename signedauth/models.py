@@ -43,36 +43,10 @@ class UserKey(models.Model):
         if not self.user:
             return 'Unsaved userkey'
 
-        return "Userkey for %s=%s" % (self.user.username, self.key)
-
-    def _add_query_param(self, query, param, val):
-        """Add a querystring parameter to the url"""
-
-        last = '%s=%s' % (param, urllib.quote_plus(val))
-        if query:
-            return "%s&%s" % (query, last)
-        else:
-            return last
-
-    def _remove_query_param(self, query, param):
-        """Removes a query param, leaving the querystring in order"""
-        parts = query.split('&')
-        look = "%s=" % param
-        for ix in range(len(parts)-1, -1, -1):
-            if parts[ix].startswith(look):
-                del parts[ix]
-
-        return '&'.join(parts)
-
-    def _replace_query_param(self, query, param, val):
-        """Replaces a query param, leaving the querystring in order"""
-        parts = query.split('&')
-        look = "%s=" % param
-        for ix in range(0, len(parts)):
-            if parts[ix].startswith(look):
-                parts[ix] = "%s=%s" % (param, urllib.quote_plus(val))
-                break
-        return '&'.join(parts)
+        username = None
+        if self.user:
+            username = self.user.username
+        return "Userkey for %s=%s" % (username, self.key)
 
     def save(self, *args, **kwargs):
         """Create the random key and save the object."""
@@ -82,24 +56,8 @@ class UserKey(models.Model):
 
         super(UserKey, self).save(*args, **kwargs)
 
-    def sign(self, work, seed):
-        """Sign a string with the given seed.
-
-        Args:
-            work: The string to sign
-            seed: The seed to use as part of the signature
-
-
-        Returns:
-            The hexdigest of the signature string
-
-        """
-        log.debug('Signing: "%s" with seed "%s"', work, seed)
-        processor = hashlib.md5(work)
-        processor.update(seed)
-        processor.update(self.key)
-        sig = processor.hexdigest()
-        return sig.lower()
+    def sign(self, url, seed=None):
+        return sign(url, seed, self.key)
 
     def sign_url(self, url, seed=None):
         """Sign an url.
@@ -116,45 +74,11 @@ class UserKey(models.Model):
         Returns:
             The same url, with its signature added to the querystring.
         """
-        origurl = url
-        parsed = urlparse.urlsplit(url)
-        query = parsed.query
-        qs = parse_qs(query)
-
-
-        if not seed:
-            # first look at query
-            if 'seed' in qs:
-                seed = qs['seed']
-                query = self._remove_query_param(query,'seed')
-            else:
-                timestamp = datetime.datetime.now()
-                timestamp = time.mktime(timestamp.timetuple())
-                seed = str(int(timestamp))
-                log.debug('sign_url: no seed, using timestamp %s', seed)
-
+        username = None
         if self.user:
-            if 'user' in qs:
-                username = qs['user']
-                if type(username) is types.ListType:
-                    username = username[0]
-                if username != self.user.username:
-                    query = self._replace_query_param(query, 'user', self.user.username)
-            else:
-                query = self._add_query_param(query, 'user', self.user.username)
-        else:
-            if 'user' in qs:
-                query = self._remove_query_param(query, 'user')
+            username = self.user.username
 
-        url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
-
-        sig = self.sign(url, seed)
-        query = self._add_query_param(query, 'seed', seed)
-        query = self._add_query_param(query, 'sig', sig)
-
-        url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
-        log.debug('Signed %s = %s', origurl, url)
-        return url
+        return sign_url(url, username, self.key, seed)
 
     def verify(self, work, seed, sig):
         """Validate that the signature for 'work' is 'sig'
@@ -167,12 +91,11 @@ class UserKey(models.Model):
         Returns:
             Boolean result
         """
-        goodsig = self.sign(work, seed)
-        if goodsig != sig:
-            log.debug('Signature mismatch: %s != %s', sig, goodsig)
-            return False
-        return True
+        username = None
+        if self.user:
+            username = self.user.username
 
+        return verify(username, work, seed, self.key, sig)
 
     def verify_url(self, url):
         """Validate a signed url using this key.
@@ -187,60 +110,12 @@ class UserKey(models.Model):
         if not self.active:
             return (False, _('UserKey not active'))
 
-        origurl = url
-        parsed = urlparse.urlsplit(url)
-        query = parsed.query
-        qs = parse_qs(query)
-
-        user = None
-
-        if not 'seed' in qs:
-            log.debug('No seed in: %s', origurl)
-            return (False, _('No seed in url'))
-
+        username = None
         if self.user:
-            if not 'user' in qs:
-                log.debug('No user in: %s', origurl)
-                return (False, _('No user in url'))
-            user = qs['user']
-            if type(user) is types.ListType:
-                user = user[0]
-            if user != self.user.username:
-                log.debug('Username mismatch: %s != %s', user, self.user.username)
-                return (False, _('Wrong user'))
-            if not self.user.is_active:
-                log.debug('User not active: %s', user)
-                return (False, _('User not active'))
+            username = self.user.username
 
-        elif 'user' in qs:
-            log.debug('No user should be sent for an anonymous query: %s', url)
-            return(False, _('No user should be sent for an anonymous query'))
-
-        if not 'sig' in qs:
-            log.debug('No sig in: %s', origurl)
-            return (False, _('URL is not signed'))
-
-        seed = qs['seed']
-        query = self._remove_query_param(query, 'seed')
-        if type(seed) is types.ListType:
-            seed = seed[0]
-
-        seedobj, created = UserSeed.objects.get_or_create(user=self.user, seed=seed)
-        if not created:
-            log.debug('Disallowing seed reuse: %s', seed)
-            return (False, _('Signature invalid - seed has been used'))
-
-        sig = qs['sig']
-        query = self._remove_query_param(query, 'sig')
-        if type(sig) is types.ListType:
-            sig = sig[0]
-        sig.lower()
-
-        url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
-        if not self.verify(url, seed, sig):
-            return (False, _('Signature does not validate'))
-
-        return (True,'OK')
+        log.debug('verifying url %s user %s, key %s', url, username, self.key)
+        return verify_url(url, username, self.key)
 
 # maybe monkeypatch user to use UserKey as its profile without forcing all users to have keys
 if settings.AUTH_PROFILE_MODULE == 'signedauth.UserKey':
@@ -357,3 +232,195 @@ class WhitelistedDomain(models.Model):
 
     def __unicode__(self):
         return u"%s: %s = %s" % (self.label, self.domain, self.user.username)
+
+
+def sign_url(url, user, key, seed=None):
+    """Sign an url.
+
+    Args:
+        url: An url to sign.  It can have query parameters which will be preserved.
+             If there is no "seed" provided as a keyword arg, it will look in the
+             query params for it before finally simply giving up and using the
+             current timestamp as the seed.
+        user: the username
+        key: the key to use
+
+    Kwargs:
+        seed: An explicit seed string to use for signing.
+
+    Returns:
+        The same url, with its signature added to the querystring.
+    """
+    origurl = url
+    parsed = urlparse.urlsplit(url)
+    query = parsed.query
+    qs = parse_qs(query)
+
+
+    if not seed:
+        # first look at query
+        if 'seed' in qs:
+            seed = qs['seed']
+            query = _remove_query_param(query,'seed')
+        else:
+            timestamp = datetime.datetime.now()
+            timestamp = time.mktime(timestamp.timetuple())
+            seed = str(int(timestamp))
+            log.debug('sign_url: no seed, using timestamp %s', seed)
+
+    if user:
+        if 'user' in qs:
+            username = qs['user']
+            if type(username) is types.ListType:
+                username = username[0]
+            if username != user:
+                query = _replace_query_param(query, 'user', user)
+        else:
+            query = _add_query_param(query, 'user', user)
+    else:
+        if 'user' in qs:
+            query = _remove_query_param(query, 'user')
+
+    url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+
+    sig = sign(url, seed, key)
+    query = _add_query_param(query, 'seed', seed)
+    query = _add_query_param(query, 'sig', sig)
+
+    url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+    log.debug('Signed %s = %s', origurl, url)
+    return url
+
+def sign(work, seed, key):
+    """Sign a string with the given seed.
+
+    Args:
+        work: The string to sign
+        seed: The seed to use as part of the signature
+        key: the key to use to sign
+
+    Returns:
+        The hexdigest of the signature string
+
+    """
+    log.debug('Signing: "%s" with seed "%s"', work, seed)
+    processor = hashlib.md5(work)
+    processor.update(seed)
+    processor.update(key)
+    sig = processor.hexdigest()
+    return sig.lower()
+
+def verify(user, work, seed, key, sig):
+    goodsig = sign(work, seed, key)
+    if goodsig != sig:
+        log.debug('Signature mismatch: %s != %s', sig, goodsig)
+        return False
+    return True
+
+def verify_url(url, user, key):
+    """Validate a signed url using this key.
+
+    Args:
+        url: the signed url
+        user: username
+        key: key
+
+    Returns:
+        A two-member tuple: (Boolean status of validation, Message string)
+    """
+
+    log.debug('verify url: %s, user %s, key %s', url, user, key)
+
+    origurl = url
+    parsed = urlparse.urlsplit(url)
+    query = parsed.query
+    qs = parse_qs(query)
+
+    if not 'seed' in qs:
+        log.debug('No seed in: %s', origurl)
+        return (False, _('No seed in url'))
+
+    if user is not None:
+        log.debug('user is not none')
+        if not 'user' in qs:
+            log.debug('No user in: %s', origurl)
+            return (False, _('No user in url'))
+        user = qs['user']
+        if type(user) is types.ListType:
+            user = user[0]
+        if user != user:
+            log.debug('Username mismatch: %s != %s', user, user)
+            return (False, _('Wrong user'))
+        try:
+            u = User.objects.get(username=user)
+            if not u.is_active:
+                log.debug('User not active: %s', user)
+                return (False, _('User not active'))
+        except User.DoesNotExist:
+            return (False, _('User does not exist'))
+
+
+    elif 'user' in qs:
+        log.debug('no user, checking in qs')
+        log.debug('No user should be sent for an anonymous query: %s', url)
+        return(False, _('No user should be sent for an anonymous query'))
+
+    else:
+        u = None
+
+    if not 'sig' in qs:
+        log.debug('No sig in: %s', origurl)
+        return (False, _('URL is not signed'))
+
+    seed = qs['seed']
+    query = _remove_query_param(query, 'seed')
+    if type(seed) is types.ListType:
+        seed = seed[0]
+
+    seedobj, created = UserSeed.objects.get_or_create(user=u, seed=seed)
+
+    if not created:
+        log.debug('Disallowing seed reuse: %s', seed)
+        return (False, _('Signature invalid - seed has been used'))
+
+    sig = qs['sig']
+    query = _remove_query_param(query, 'sig')
+    if type(sig) is types.ListType:
+        sig = sig[0]
+    sig.lower()
+
+    url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+
+    if not verify(user, url, seed, key, sig):
+        return (False, _('Signature does not validate'))
+
+    return (True,'OK')
+
+def _add_query_param(query, param, val):
+    """Add a querystring parameter to the url"""
+
+    last = '%s=%s' % (param, urllib.quote_plus(val))
+    if query:
+        return "%s&%s" % (query, last)
+    else:
+        return last
+
+def _remove_query_param(query, param):
+    """Removes a query param, leaving the querystring in order"""
+    parts = query.split('&')
+    look = "%s=" % param
+    for ix in range(len(parts)-1, -1, -1):
+        if parts[ix].startswith(look):
+            del parts[ix]
+
+    return '&'.join(parts)
+
+def _replace_query_param(query, param, val):
+    """Replaces a query param, leaving the querystring in order"""
+    parts = query.split('&')
+    look = "%s=" % param
+    for ix in range(0, len(parts)):
+        if parts[ix].startswith(look):
+            parts[ix] = "%s=%s" % (param, urllib.quote_plus(val))
+            break
+    return '&'.join(parts)

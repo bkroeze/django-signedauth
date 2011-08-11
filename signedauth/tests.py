@@ -79,6 +79,7 @@ class UserKeyTest(TestCase):
          """Test signature roundtrip with a real user"""
          user = User.objects.create(username='joe', is_active=True)
          k = UserKey(active=True, user=user)
+         k.save()
          url = 'http://localhost/test/'
          signed = k.sign_url(url, 'uuu')
          parsed = urlparse.urlsplit(signed)
@@ -94,6 +95,7 @@ class UserKeyTest(TestCase):
          """Test signature roundtrip with a real user"""
          user = User.objects.create(username='joe', is_active=True)
          k = UserKey(active=True, user=user)
+         k.save()
          url = 'http://localhost/test/'
          signed = k.sign_url(url, 'uuu')
 

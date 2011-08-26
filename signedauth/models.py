@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
-from django.utils.translation import ugettext_lazy as _
 import base64
 import datetime, time
 import hashlib
@@ -26,16 +25,16 @@ class UserSeed(models.Model):
     """
 
     user = models.ForeignKey(User, null = True, db_index=True)
-    seed = models.CharField(_('Seed'), max_length=44, blank=True, null=False, db_index=True)
-    timestamp = models.DateTimeField(_('Time Stamp'), auto_now_add=True)
+    seed = models.CharField('Seed', max_length=44, blank=True, null=False, db_index=True)
+    timestamp = models.DateTimeField('Time Stamp', auto_now_add=True)
 
 
 class UserKey(models.Model):
     """A key associated to a user."""
 
-    label = models.CharField(_('Label'), blank=False, null=False, max_length=10, help_text='Enter anything here to create the key')
-    key = models.CharField(_('Key'), blank=False, null=False, max_length=44)
-    timestamp = models.DateTimeField(_('Time Stamp'), auto_now_add=True)
+    label = models.CharField('Label', blank=False, null=False, max_length=10, help_text='Enter anything here to create the key')
+    key = models.CharField('Key', blank=False, null=False, max_length=44)
+    timestamp = models.DateTimeField('Time Stamp', auto_now_add=True)
     active = models.BooleanField(default=False)
     user = models.ForeignKey(User, null=True)
 
@@ -108,7 +107,7 @@ class UserKey(models.Model):
         """
 
         if not self.active:
-            return (False, _('UserKey not active'))
+            return (False, 'UserKey not active')
 
         username = None
         if self.user:
@@ -161,8 +160,8 @@ class WhitelistedIP(models.Model):
     """A single IP Address that doesn't have to explicitly
     provide signatures to be authenticated as the attached user."""
 
-    label = models.CharField(_("Label"), max_length=30)
-    ip = models.IPAddressField(_("Ip Address"), db_index=True)
+    label = models.CharField("Label", max_length=30)
+    ip = models.IPAddressField("Ip Address", db_index=True)
     user = models.ForeignKey(User)
 
     objects = WhitelistedIPManager()
@@ -223,9 +222,9 @@ class WhitelistedDomain(models.Model):
     """A domain or group of domains that don't have to explicitly
     provide signatures to be authenticated at the attached user."""
 
-    label = models.CharField(_("Label"), max_length=30)
-    domain = models.CharField(_("Domain name"), db_index=True, max_length=100)
-    subdomains = models.BooleanField(_("Include Subdomains?"), default=False)
+    label = models.CharField("Label", max_length=30)
+    domain = models.CharField("Domain name", db_index=True, max_length=100)
+    subdomains = models.BooleanField("Include Subdomains?", default=False)
     user = models.ForeignKey(User)
 
     objects = WhitelistedDomainManager()
@@ -338,39 +337,39 @@ def verify_url(url, user, key):
 
     if not 'seed' in qs:
         log.debug('No seed in: %s', origurl)
-        return (False, _('No seed in url'))
+        return (False, 'No seed in url')
 
     if user is not None:
         log.debug('user is not none')
         if not 'user' in qs:
             log.debug('No user in: %s', origurl)
-            return (False, _('No user in url'))
+            return (False, 'No user in url')
         user = qs['user']
         if type(user) is types.ListType:
             user = user[0]
         if user != user:
             log.debug('Username mismatch: %s != %s', user, user)
-            return (False, _('Wrong user'))
+            return (False, 'Wrong user')
         try:
             u = User.objects.get(username=user)
             if not u.is_active:
                 log.debug('User not active: %s', user)
-                return (False, _('User not active'))
+                return (False, 'User not active')
         except User.DoesNotExist:
-            return (False, _('User does not exist'))
+            return (False, 'User does not exist')
 
 
     elif 'user' in qs:
         log.debug('no user, checking in qs')
         log.debug('No user should be sent for an anonymous query: %s', url)
-        return(False, _('No user should be sent for an anonymous query'))
+        return(False, 'No user should be sent for an anonymous query')
 
     else:
         u = None
 
     if not 'sig' in qs:
         log.debug('No sig in: %s', origurl)
-        return (False, _('URL is not signed'))
+        return (False, 'URL is not signed')
 
     seed = qs['seed']
     query = _remove_query_param(query, 'seed')
@@ -381,7 +380,7 @@ def verify_url(url, user, key):
 
     if not created:
         log.debug('Disallowing seed reuse: %s', seed)
-        return (False, _('Signature invalid - seed has been used'))
+        return (False, 'Signature invalid - seed has been used')
 
     sig = qs['sig']
     query = _remove_query_param(query, 'sig')
@@ -392,7 +391,7 @@ def verify_url(url, user, key):
     url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
 
     if not verify(user, url, seed, key, sig):
-        return (False, _('Signature does not validate'))
+        return (False, 'Signature does not validate')
 
     return (True,'OK')
 

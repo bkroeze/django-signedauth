@@ -1,7 +1,11 @@
+try:
+    from django.utils import simplejson
+except ImportError:
+    import simplejson
+
 import logging
 import os
 import httplib2
-import simplejson
 from urllib import urlencode
 from signedauth.models import UserKey
 

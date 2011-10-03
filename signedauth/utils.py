@@ -108,7 +108,10 @@ def remote_json(remote, url, user=None, data=None, method='GET'):
     else:
         resp, content = http.request(url, method, body=urlencode(data))
 
-    log.debug('content: %s', content)
-    data = simplejson.loads(content)
-    log.debug('JSON return: %s', data)
+    #log.debug('response: %s, \ncontent: %s', resp, content)
+    if resp['status'] == 200:
+        data = simplejson.loads(content)
+        log.debug('JSON return: %s', data)
+    else:
+        data = content
     return resp, data

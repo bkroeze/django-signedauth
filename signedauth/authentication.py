@@ -63,42 +63,6 @@ class IPUserAuthentication(UserAuthentication):
     def __repr__(self):
         return u'<IPUserAuthentication>'
 
-class SynchronizedIPUserAuthentication(UserAuthentication):
-    """
-    Authenticates using IPUserAuthentication, after checking to make sure the user is synched
-    with the remote server.
-    """
-
-    def __init__(self, remote):
-        """Initialize, with the specified remote server"""
-        self.remote = remote
-
-    def is_authenticated(self, request):
-        log.debug("SynchronizedUserAuthentication start")
-
-        # first check for whitelisted IP
-
-        ip = request.META.get('REMOTE_ADDR', None)
-        domain = request.META.get('HTTP_REFERER', None)
-        user = request.user
-
-        key = cache_key('whitelisted', ip, domain, user)
-        try:
-            white = cache_get(key)
-            if white:
-                log.debug('Cached whitelisted, returning True')
-                return True
-        except NotCachedError:
-            pass
-
-        # not cached, check remote
-        user = User.objects.get(username='bmapi')
-        url = reverse('authentication_remotelookup')
-        remote_json(self.remote, url)
-
-
-
-
 # ----- helpers
 
 class Signature(object):

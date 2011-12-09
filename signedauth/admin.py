@@ -13,7 +13,7 @@ class WhitelistedIPAdmin(admin.ModelAdmin):
 
 class WhitelistedDomainAdmin(admin.ModelAdmin):
     list_fields = ('label','ip')
-
+    raw_id_fields = ('user',)
 
 admin.site.unregister(User)
 

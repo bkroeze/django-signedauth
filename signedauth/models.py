@@ -378,7 +378,7 @@ def verify_url(url, user, key):
 
     seedobj, created = UserSeed.objects.get_or_create(user=u, seed=seed)
 
-    if not created:
+    if created:
         log.debug('Disallowing seed reuse: %s', seed)
         return (False, 'Signature invalid - seed has been used')
 

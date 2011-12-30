@@ -378,7 +378,7 @@ def verify_url(url, user, key):
 
     seedobj, created = UserSeed.objects.get_or_create(user=u, seed=seed)
 
-    if created:
+    if not created:
         log.debug('Disallowing seed reuse: %s', seed)
         return (False, 'Signature invalid - seed has been used')
 
@@ -388,7 +388,17 @@ def verify_url(url, user, key):
         sig = sig[0]
     sig.lower()
 
-    url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+    urlpath = parsed.path
+
+    if 'prefix' in qs:
+        prefix = qs['prefix']
+        if type(prefix) is types.ListType:
+            prefix = prefix[0]
+        query = _remove_query_param(query, 'prefix')
+        urlpath = prefix+urlpath
+        log.debug('prefix is: %s, path now: %s', prefix, urlpath)
+
+    url = urlparse.urlunsplit((parsed.scheme, parsed.netloc, urlpath, query, parsed.fragment))
 
     if not verify(user, url, seed, key, sig):
         return (False, 'Signature does not validate')

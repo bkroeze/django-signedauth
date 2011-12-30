@@ -11,5 +11,6 @@ setup(name='Signedauth',
       packages=['signedauth',],
       install_requires=[
         'django-keyedcache >= 1.4',
+        'httplib2 >= 0.7.2',
         ]
      )

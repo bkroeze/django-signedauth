@@ -17,7 +17,8 @@ width: 400px;
 
 <form name="explore" action="." method="POST">
 <table>
-{{ form.as_table }}
+{% csrf_token %}
+  {{ form.as_table }}
 <tr>
   <td>&nbsp;</td>
   <td><input type="submit" value="explore" /></td>
